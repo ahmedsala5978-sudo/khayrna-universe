@@ -1,186 +1,100 @@
-
-// ==========================================
-// KHAYRNA UNIVERSE
-// WORLD STATE SYSTEM - V0.1
-// ==========================================
-
 (function () {
-
   const STORAGE_KEY = "khayrna_universe_v01";
 
-  const DEFAULT_STATE = {
-    version: "0.1",
-
+  const defaultState = {
     worldName: "كون خيرنا",
-
     cityName: "المدينة الأولى",
-
-    day: 1,
-
-    running: true,
-
     resources: {
       points: 30,
       materials: 12,
       knowledge: 8
     },
-
-    events: [
-      {
-        message: "تم إنشاء العالم لأول مرة.",
-        time: new Date().toISOString()
-      }
-    ],
-
-    createdAt: new Date().toISOString()
+    events: ["تم إنشاء العالم لأول مرة."],
+    running: true
   };
 
-  function createDefaultState() {
-    return JSON.parse(JSON.stringify(DEFAULT_STATE));
-  }
-
   function loadState() {
-
     try {
-
       const saved = localStorage.getItem(STORAGE_KEY);
 
       if (!saved) {
-        return createDefaultState();
+        return structuredClone(defaultState);
       }
 
       const parsed = JSON.parse(saved);
 
       return {
-        ...createDefaultState(),
+        ...defaultState,
         ...parsed,
-
         resources: {
-          ...DEFAULT_STATE.resources,
+          ...defaultState.resources,
           ...(parsed.resources || {})
         },
-
         events: Array.isArray(parsed.events)
           ? parsed.events
-          : []
+          : [...defaultState.events]
       };
-
     } catch (error) {
-
-      console.error("World loading error:", error);
-
-      return createDefaultState();
+      console.error("خطأ في استعادة العالم:", error);
+      return structuredClone(defaultState);
     }
   }
 
-  let state = loadState();
+  let worldState = loadState();
 
   function saveState() {
-
     try {
-
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify(state)
+        JSON.stringify(worldState)
       );
-
       return true;
-
     } catch (error) {
-
-      console.error("World saving error:", error);
-
+      console.error("تعذر حفظ العالم:", error);
       return false;
     }
-  }
-
-  function addEvent(message) {
-
-    if (typeof message !== "string" || !message.trim()) {
-      return false;
-    }
-
-    state.events.unshift({
-      message: message.trim(),
-      time: new Date().toISOString()
-    });
-
-    state.events = state.events.slice(0, 50);
-
-    saveState();
-
-    return true;
-  }
-
-  function updateResource(resource, amount) {
-
-    if (!Object.prototype.hasOwnProperty.call(
-      state.resources,
-      resource
-    )) {
-      return false;
-    }
-
-    if (!Number.isFinite(amount)) {
-      return false;
-    }
-
-    const newValue = state.resources[resource] + amount;
-
-    if (newValue < 0) {
-      return false;
-    }
-
-    state.resources[resource] = newValue;
-
-    saveState();
-
-    return true;
-  }
-
-  function setRunning(value) {
-
-    state.running = Boolean(value);
-
-    saveState();
-
-    return state.running;
-  }
-
-  function getState() {
-
-    return JSON.parse(JSON.stringify(state));
-  }
-
-  function resetWorld() {
-
-    state = createDefaultState();
-
-    saveState();
-
-    return getState();
   }
 
   window.KHAYRNA_WORLD = {
+    getState() {
+      return worldState;
+    },
 
-    getState,
+    saveState() {
+      return saveState();
+    },
 
-    saveState,
+    addEvent(message) {
+      worldState.events.unshift(message);
+      worldState.events = worldState.events.slice(0, 100);
+      saveState();
+    },
 
-    addEvent,
+    updateResource(name, amount) {
+      if (!(name in worldState.resources)) return false;
 
-    updateResource,
+      worldState.resources[name] += amount;
+      saveState();
+      return true;
+    },
 
-    setRunning,
+    setRunning(value) {
+      worldState.running = Boolean(value);
+      saveState();
+    },
 
-    resetWorld
-
+    resetWorld() {
+      worldState = structuredClone(defaultState);
+      saveState();
+      return worldState;
+    }
   };
 
-  console.log("Khayrna World State initialized.");
+  // حفظ تلقائي دوري
+  setInterval(saveState, 10000);
 
+  // حفظ عند مغادرة الصفحة
+  window.addEventListener("beforeunload", saveState);
+
+  console.log("Khayrna World State Ready");
 })();
-
-// ==========================================
-// END OF WORLD STATE SYSTEM
-// ==========================================
