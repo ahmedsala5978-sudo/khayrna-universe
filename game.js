@@ -3,28 +3,113 @@
   "use strict";
 
   const state = window.KHAYRNA_WORLD;
-  const agents = window.KHAYRNA_AGENTS.map(a => ({...a}));
+  const agents = window.KHAYRNA_AGENTS.map(a => ({ ...a }));
+  const actions = window.KHAYRNA_AGENT_ACTIONS;
+
+  if (!state || !actions) {
+    console.error("تعذر تحميل نظام العالم أو مهام الوكلاء.");
+    return;
+  }
 
   let paused = !state.getState().running;
   let tick = 0;
 
   const $ = id => document.getElementById(id);
 
+  // أسماء الموارد بالعربية
+  const resourceNames = {
+    points: "نقاط المجتمع",
+    materials: "مواد البناء",
+    knowledge: "المعرفة"
+  };
+
   function log(message) {
     state.addEvent(message);
     renderPanels();
   }
 
+  // مزامنة بيانات الوكيل مع واجهة اللعبة
+  function syncAgent(updatedAgent) {
+    const localAgent = agents.find(a => a.id === updatedAgent.id);
+
+    if (localAgent) {
+      localAgent.task = updatedAgent.task;
+      localAgent.status = updatedAgent.status;
+    }
+  }
+
+  // تنسيق الموارد والتكاليف والمكافآت
+  function formatResources(resources) {
+    const entries = Object.entries(resources || {});
+
+    if (entries.length === 0) {
+      return "لا توجد";
+    }
+
+    return entries.map(([name, amount]) => {
+      return (resourceNames[name] || name) + ": " + amount;
+    }).join("، ");
+  }
+
+  // تحديث لوحة تفاصيل المهمة
+  function renderTaskDetails() {
+    const agentId = $("agent-select").value;
+    const taskId = $("task-select").value;
+
+    const description = $("task-description");
+
+    if (!agentId || !taskId) {
+      description.textContent =
+        "اختر الوكيل والمهمة لعرض التفاصيل.";
+      return;
+    }
+
+    const task = actions.getTasks(agentId)
+      .find(item => item.id === taskId);
+
+    if (!task) {
+      description.textContent = "المهمة غير متاحة.";
+      return;
+    }
+
+    description.textContent =
+      "المهمة: " + task.name +
+      "\n\nالتفاصيل: " + task.description +
+      "\n\nالتكلفة: " + formatResources(task.cost) +
+      "\n\nالمكافأة: " + formatResources(task.reward);
+  }
+
+  // تحميل مهام الوكيل المختار
+  function renderTaskOptions() {
+    const agentId = $("agent-select").value;
+    const taskSelect = $("task-select");
+
+    const tasks = actions.getTasks(agentId);
+
+    taskSelect.innerHTML =
+      '<option value="">اختر مهمة</option>';
+
+    tasks.forEach(task => {
+      const option = document.createElement("option");
+      option.value = task.id;
+      option.textContent = task.name;
+      taskSelect.appendChild(option);
+    });
+
+    renderTaskDetails();
+  }
+
+  // تحديث جميع لوحات العالم
   function renderPanels() {
     const world = state.getState();
 
     $("agents-list").innerHTML = agents.map(agent => `
       <div class="agent">
         <div>
-          <strong>${agent.emoji} ${agent.name}</strong>
-          <small>${agent.role}</small>
+          <strong>${escapeHTML(agent.emoji)} ${escapeHTML(agent.name)}</strong>
+          <small>${escapeHTML(agent.role)}</small>
         </div>
-        <span>${agent.task}</span>
+        <span>${escapeHTML(agent.task)}</span>
       </div>
     `).join("");
 
@@ -33,7 +118,9 @@
     $("knowledge").textContent = world.resources.knowledge;
 
     $("event-log").innerHTML = world.events.map(event =>
-      `<li>${escapeHTML(typeof event === "string" ? event : event.message)}</li>`
+      `<li>${escapeHTML(
+        typeof event === "string" ? event : event.message
+      )}</li>`
     ).join("");
 
     $("world-status").textContent =
@@ -43,6 +130,7 @@
       paused ? "استئناف المحاكاة" : "إيقاف المحاكاة";
   }
 
+  // حماية النصوص قبل عرضها في HTML
   function escapeHTML(value) {
     return String(value).replace(/[&<>"']/g, char => ({
       "&": "&amp;",
@@ -53,6 +141,79 @@
     })[char]);
   }
 
+  // تعيين مهمة للوكيل
+  function assignSelectedTask() {
+    const agentId = $("agent-select").value;
+    const taskId = $("task-select").value;
+    const resultBox = $("task-result");
+
+    if (!taskId) {
+      resultBox.textContent = "اختر مهمة أولاً.";
+      return;
+    }
+
+    const result = actions.assignTask(agentId, taskId);
+
+    if (!result.success) {
+      resultBox.textContent = result.message;
+      return;
+    }
+
+    syncAgent(result.agent);
+
+    resultBox.textContent =
+      "✓ " + result.message + " " + result.agent.name +
+      " أصبح مسؤولاً عن المهمة.";
+
+    renderPanels();
+  }
+
+  // تنفيذ المهمة المختارة
+  function executeSelectedTask() {
+    const agentId = $("agent-select").value;
+    const taskId = $("task-select").value;
+    const resultBox = $("task-result");
+
+    if (!taskId) {
+      resultBox.textContent = "اختر مهمة أولاً.";
+      return;
+    }
+
+    const selectedTask = actions.getTasks(agentId)
+      .find(item => item.id === taskId);
+
+    if (!selectedTask) {
+      resultBox.textContent = "المهمة غير متاحة.";
+      return;
+    }
+
+    const agent = actions.getAgent(agentId);
+
+    if (!agent || agent.task !== selectedTask.name) {
+      resultBox.textContent =
+        "يجب تعيين المهمة للوكيل أولاً.";
+      return;
+    }
+
+    const result = actions.executeTask(agentId, taskId);
+
+    if (!result.success) {
+      resultBox.textContent = "✗ " + result.message;
+      return;
+    }
+
+    syncAgent(result.agent);
+
+    resultBox.textContent =
+      "✓ تم تنفيذ المهمة بنجاح: " + selectedTask.name +
+      "\nالموارد الحالية: " +
+      formatResources(result.resources);
+
+    renderPanels();
+    renderTaskDetails();
+  }
+
+  // مشهد المدينة
   class WorldScene extends Phaser.Scene {
 
     constructor() {
@@ -113,7 +274,7 @@
             fontSize: "13px",
             color: "#20312b",
             backgroundColor: "#ffffffcc",
-            padding: {x: 4, y: 2}
+            padding: { x: 4, y: 2 }
           }
         ).setOrigin(0.5);
       });
@@ -194,6 +355,7 @@
     }
   }
 
+  // إعداد اللعبة
   const config = {
     type: Phaser.AUTO,
     parent: "game-container",
@@ -209,6 +371,7 @@
 
   new Phaser.Game(config);
 
+  // أزرار العالم
   $("pause-btn").addEventListener("click", () => {
     paused = !paused;
     state.setRunning(!paused);
@@ -236,7 +399,22 @@
     renderPanels();
   });
 
-  // الحفظ التلقائي ومؤشر حالة الحفظ
+  // أزرار نظام المهام
+  $("agent-select").addEventListener("change", () => {
+    renderTaskOptions();
+    $("task-result").textContent = "اختر مهمة للوكيل.";
+  });
+
+  $("task-select").addEventListener("change", () => {
+    renderTaskDetails();
+    $("task-result").textContent = "يمكنك تعيين المهمة أو تنفيذها.";
+  });
+
+  $("assign-task-btn").addEventListener("click", assignSelectedTask);
+
+  $("execute-task-btn").addEventListener("click", executeSelectedTask);
+
+  // الحفظ التلقائي
   const saveStatus = $("save-status");
 
   if (saveStatus) {
@@ -253,6 +431,8 @@
     }
   }, 10000);
 
+  // العرض الأولي
+  renderTaskOptions();
   renderPanels();
 
 })();
