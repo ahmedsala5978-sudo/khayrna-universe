@@ -33,7 +33,7 @@
     $("knowledge").textContent = world.resources.knowledge;
 
     $("event-log").innerHTML = world.events.map(event =>
-      `<li>${escapeHTML(event.message)}</li>`
+      `<li>${escapeHTML(typeof event === "string" ? event : event.message)}</li>`
     ).join("");
 
     $("world-status").textContent =
@@ -235,6 +235,23 @@
     log("تمت إعادة ضبط العالم.");
     renderPanels();
   });
+
+  // الحفظ التلقائي ومؤشر حالة الحفظ
+  const saveStatus = $("save-status");
+
+  if (saveStatus) {
+    saveStatus.textContent = "الحفظ التلقائي يعمل...";
+  }
+
+  setInterval(() => {
+    const saved = state.saveState();
+
+    if (saveStatus) {
+      saveStatus.textContent = saved
+        ? "الحفظ التلقائي يعمل ✓"
+        : "تعذر حفظ العالم!";
+    }
+  }, 10000);
 
   renderPanels();
 
