@@ -57,6 +57,8 @@
           border-radius:10px;
           margin-bottom:10px;
           line-height:1.8;
+          direction:rtl;
+          text-align:right;
         ">
           أهلاً بك! أنا مساعد خيرنا الذكي.
           كيف يمكنني مساعدتك في تطوير الكون؟
@@ -76,7 +78,7 @@
           rows="2"
           maxlength="2000"
           placeholder="اكتب رسالتك هنا..."
-          dir="auto"
+          dir="rtl"
           lang="ar"
           enterkeyhint="send"
           autocomplete="off"
@@ -92,9 +94,9 @@
             font-family:Arial,Tahoma,sans-serif;
             font-size:16px;
             line-height:1.7;
-            direction:auto;
-            text-align:start;
-            unicode-bidi:plaintext;
+            direction:rtl;
+            text-align:right;
+            unicode-bidi:normal;
             outline:none;
             background:#fff;
             color:#222;
@@ -136,9 +138,9 @@
         white-space:pre-wrap;
         overflow-wrap:anywhere;
         line-height:1.8;
-        direction:auto;
-        text-align:start;
-        unicode-bidi:plaintext;
+        direction:rtl;
+        text-align:right;
+        unicode-bidi:normal;
       `;
 
       bubble.textContent = text;
