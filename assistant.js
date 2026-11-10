@@ -4,6 +4,8 @@
     "https://khayrna-brain.salahahmed245663467.workers.dev";
 
   function createAssistant() {
+    if (document.getElementById("khayrna-assistant")) return;
+
     const panel = document.createElement("section");
     panel.id = "khayrna-assistant";
 
@@ -17,12 +19,12 @@
       border: 1px solid #d8e5dc;
       border-radius: 14px;
       box-shadow: 0 5px 25px rgba(0,0,0,0.15);
-      z-index: 9999;
+      z-index: 99999;
       display: flex;
       flex-direction: column;
       overflow: hidden;
       direction: rtl;
-      font-family: Arial, sans-serif;
+      font-family: Arial, Tahoma, sans-serif;
     `;
 
     panel.innerHTML = `
@@ -46,12 +48,15 @@
         overflow-y:auto;
         padding:12px;
         background:#f5f8f5;
+        direction:rtl;
+        text-align:right;
       ">
         <div style="
           background:white;
           padding:10px;
           border-radius:10px;
           margin-bottom:10px;
+          line-height:1.8;
         ">
           أهلاً بك! أنا مساعد خيرنا الذكي.
           كيف يمكنني مساعدتك في تطوير الكون؟
@@ -63,24 +68,41 @@
         gap:6px;
         padding:10px;
         border-top:1px solid #ddd;
+        direction:rtl;
+        background:white;
       ">
-        <input
+        <textarea
           id="assistant-input"
-          type="text"
+          rows="2"
           maxlength="2000"
           placeholder="اكتب رسالتك هنا..."
+          dir="auto"
+          lang="ar"
+          enterkeyhint="send"
           autocomplete="off"
+          autocorrect="on"
+          spellcheck="true"
           style="
             flex:1;
             min-width:0;
-            padding:11px;
-            border:1px solid #ccc;
+            resize:none;
+            padding:12px;
+            border:1px solid #aaa;
             border-radius:8px;
-            font-size:14px;
+            font-family:Arial,Tahoma,sans-serif;
+            font-size:16px;
+            line-height:1.7;
+            direction:auto;
+            text-align:start;
+            unicode-bidi:plaintext;
+            outline:none;
+            background:#fff;
+            color:#222;
           "
-        >
+        ></textarea>
 
         <button
+          id="assistant-send"
           type="submit"
           style="
             background:#246b45;
@@ -89,6 +111,7 @@
             border-radius:8px;
             padding:10px 14px;
             cursor:pointer;
+            font-size:14px;
           "
         >إرسال</button>
       </form>
@@ -100,7 +123,7 @@
     const input = panel.querySelector("#assistant-input");
     const messages = panel.querySelector("#assistant-messages");
     const status = panel.querySelector("#assistant-status");
-    const sendButton = form.querySelector("button");
+    const sendButton = panel.querySelector("#assistant-send");
 
     function addMessage(text, sender) {
       const bubble = document.createElement("div");
@@ -112,11 +135,13 @@
         margin-bottom:10px;
         white-space:pre-wrap;
         overflow-wrap:anywhere;
-        line-height:1.7;
+        line-height:1.8;
+        direction:auto;
+        text-align:start;
+        unicode-bidi:plaintext;
       `;
 
       bubble.textContent = text;
-
       messages.appendChild(bubble);
       messages.scrollTop = messages.scrollHeight;
     }
@@ -129,6 +154,7 @@
       if (!message) return;
 
       addMessage(message, "user");
+
       input.value = "";
       input.disabled = true;
       sendButton.disabled = true;
@@ -165,6 +191,13 @@
         input.disabled = false;
         sendButton.disabled = false;
         input.focus();
+      }
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" && !event.shiftKey) {
+        event.preventDefault();
+        form.requestSubmit();
       }
     });
   }
