@@ -13,7 +13,7 @@
   <header class="topbar">
     <div>
       <strong>كون خيرنا 🌍</strong>
-      <span>الإصدار التأسيسي V0.3</span>
+      <span>الإصدار التأسيسي V0.4</span>
     </div>
     <div id="world-status">العالم يعمل</div>
   </header>
@@ -29,9 +29,37 @@
     </section>
 
     <aside class="side-panel">
+
       <section class="card">
         <h2>الوكلاء</h2>
         <div id="agents-list"></div>
+      </section>
+
+      <section class="card">
+        <h2>إدارة مهام الوكلاء</h2>
+
+        <label for="agent-select">اختر الوكيل:</label>
+        <select id="agent-select">
+          <option value="manager">🔵 المدير</option>
+          <option value="builder">🟠 البنّاء</option>
+          <option value="researcher">🟢 الباحث</option>
+        </select>
+
+        <label for="task-select">اختر المهمة:</label>
+        <select id="task-select">
+          <option value="">اختر مهمة أولاً</option>
+        </select>
+
+        <div id="task-description">
+          اختر الوكيل والمهمة لعرض التفاصيل.
+        </div>
+
+        <div class="task-buttons">
+          <button id="assign-task-btn">تعيين المهمة</button>
+          <button id="execute-task-btn">تنفيذ المهمة</button>
+        </div>
+
+        <p id="task-result">بانتظار اختيار مهمة.</p>
       </section>
 
       <section class="card">
@@ -54,6 +82,7 @@
         <button id="reset-btn">إعادة ضبط التجربة</button>
         <p id="save-status">الحفظ محلي على جهازك.</p>
       </section>
+
     </aside>
   </main>
 
@@ -63,7 +92,7 @@
   <script src="agents/agents.js"></script>
   <script src="systems/world-state.js"></script>
 
-  <!-- نظام مهام الوكلاء الجديد -->
+  <!-- نظام مهام الوكلاء -->
   <script src="systems/agent-actions.js"></script>
 
   <!-- تشغيل العالم -->
