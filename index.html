@@ -1161,7 +1161,7 @@ footer {
 
     S.ring = new THREE.Mesh(
       new THREE.RingGeometry(PLOT * 0.55, PLOT * 0.62, 40),
-      new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide })
+      new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide, transparent: true })
     );
     S.ring.rotation.x = -Math.PI / 2; S.ring.visible = false;
     scene.add(S.ring);
@@ -1277,7 +1277,7 @@ footer {
 
   // ---------- الواجهة ----------
   function buildUI(host) {
-    host.innerHTML = `
+    host.insertAdjacentHTML("beforeend", `
       <div class="c3-top">
         <div class="c3-info" id="c3-info"></div>
         <div class="c3-tools">
@@ -1285,7 +1285,7 @@ footer {
           <button type="button" id="c3-reset" title="إعادة الكاميرا">🎯</button>
         </div>
       </div>
-      <div class="c3-bar" id="c3-bar"></div>`;
+      <div class="c3-bar" id="c3-bar"></div>`);
 
     const bar = host.querySelector("#c3-bar");
     TYPES.forEach((t) => {
@@ -1401,6 +1401,7 @@ footer {
         S.active = false;
         host.style.display = "none";
         game.style.display = "";
+        window.dispatchEvent(new Event("resize"));
       }
     }
     tabs.addEventListener("click", (e) => {
