@@ -790,6 +790,587 @@ footer {
 
 </script>
 
+  <!-- المدينة ثلاثية الأبعاد -->
+  <script>
+/* كون خيرنا — المدينة ثلاثية الأبعاد (Three.js)
+   تضيف تبويب "🏙️ مدينة 3D" جنب الخريطة 2D، ومش بتغيّر منطق اللعبة. */
+(() => {
+  const THREE_URL =
+    "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+  const SAVE_KEY = "khayruna_city3d_v1";
+
+  const COLS = 4, ROWS = 3, PLOT = 6, STEP = 9;
+
+  const CSS = `
+    .view-tabs { display: inline-flex; gap: 6px; padding: 4px;
+      background: rgba(0,0,0,.25); border: 1px solid var(--card-border, #234);
+      border-radius: 999px; margin-bottom: 12px; }
+    .view-tabs button { border: 0 !important; background: transparent !important;
+      color: #9fbbab !important; padding: 8px 16px !important; border-radius: 999px !important;
+      font-size: 14px !important; cursor: pointer; transform: none !important; }
+    .view-tabs button.on { background: linear-gradient(135deg,#2f8f5b,#3ddc84) !important;
+      color: #06210f !important; }
+
+    #city3d-container { display: none; position: relative; height: clamp(380px, 68vh, 560px);
+      border-radius: 14px; overflow: hidden; border: 1px solid var(--card-border, #234);
+      box-shadow: 0 10px 35px rgba(0,0,0,.4); line-height: 1.5; user-select: none;
+      -webkit-user-select: none; }
+    #city3d-container canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+    #city3d-container .c3-top { position: absolute; top: 10px; right: 10px; left: 10px;
+      display: flex; justify-content: space-between; gap: 8px; pointer-events: none; }
+    #city3d-container .c3-info { background: rgba(7,20,15,.72); color: #eaf5ee;
+      padding: 7px 12px; border-radius: 12px; font-size: 13px; backdrop-filter: blur(8px);
+      pointer-events: auto; }
+    #city3d-container .c3-tools { display: flex; gap: 6px; pointer-events: auto; }
+    #city3d-container .c3-tools button { width: 38px; height: 38px; padding: 0 !important;
+      border-radius: 50% !important; font-size: 17px !important; cursor: pointer;
+      background: rgba(7,20,15,.72) !important; color: #fff !important;
+      border: 1px solid rgba(255,255,255,.2) !important; transform: none !important; }
+
+    #city3d-container .c3-bar { position: absolute; bottom: 10px; right: 10px; left: 10px;
+      display: flex; gap: 8px; overflow-x: auto; padding: 8px; border-radius: 16px;
+      background: rgba(7,20,15,.78); backdrop-filter: blur(10px); }
+    #city3d-container .c3-bar button { flex: 0 0 auto; min-width: 74px; padding: 8px 10px !important;
+      border-radius: 12px !important; background: rgba(255,255,255,.1) !important;
+      color: #eaf5ee !important; border: 1px solid rgba(255,255,255,.15) !important;
+      font-size: 13px !important; line-height: 1.3; cursor: pointer; transform: none !important; }
+    #city3d-container .c3-bar button span { display: block; font-size: 22px; }
+    #city3d-container .c3-bar button:hover { background: rgba(61,220,132,.25) !important; }
+    #city3d-container .c3-bar .danger { color: #ff8a8a !important; }
+    #city3d-container .c3-msg { position: absolute; inset: 0; display: grid; place-items: center;
+      color: #eaf5ee; background: #0a1f17; font-size: 15px; text-align: center; padding: 20px; }
+  `;
+
+  // ---------- أنواع المباني ----------
+  let THREE = null;
+  const facadeMats = new Set();
+  let night = false;
+
+  function facade(floors, cols, wall, door) {
+    const cw = 64, ch = 64;
+    const mk = () => {
+      const c = document.createElement("canvas");
+      c.width = cw * cols; c.height = ch * floors;
+      return c;
+    };
+    const c = mk(), e = mk();
+    const x = c.getContext("2d"), y = e.getContext("2d");
+    x.fillStyle = wall; x.fillRect(0, 0, c.width, c.height);
+    y.fillStyle = "#000"; y.fillRect(0, 0, e.width, e.height);
+    for (let f = 0; f < floors; f++) {
+      for (let k = 0; k < cols; k++) {
+        const ox = k * cw, oy = f * ch;
+        if (door && f === floors - 1 && k === Math.floor(cols / 2)) {
+          x.fillStyle = "#6b4226"; x.fillRect(ox + 18, oy + 16, 28, 48);
+          x.fillStyle = "#e8c36a"; x.fillRect(ox + 39, oy + 40, 3, 3);
+          continue;
+        }
+        x.fillStyle = "#9fd3ff"; x.fillRect(ox + 14, oy + 14, 36, 34);
+        x.strokeStyle = "#ffffff"; x.lineWidth = 3; x.strokeRect(ox + 14, oy + 14, 36, 34);
+        x.beginPath(); x.moveTo(ox + 32, oy + 14); x.lineTo(ox + 32, oy + 48); x.stroke();
+        if (Math.random() < 0.65) {
+          y.fillStyle = "#ffd27a"; y.fillRect(ox + 15, oy + 15, 34, 32);
+        }
+      }
+    }
+    const mat = new THREE.MeshLambertMaterial({
+      map: new THREE.CanvasTexture(c),
+      emissive: 0xffffff,
+      emissiveMap: new THREE.CanvasTexture(e),
+      emissiveIntensity: night ? 1 : 0
+    });
+    facadeMats.add(mat);
+    return mat;
+  }
+
+  const plain = (color) => new THREE.MeshLambertMaterial({ color });
+
+  function mesh(geo, mat, x, y, z) {
+    const m = new THREE.Mesh(geo, mat);
+    m.position.set(x, y, z);
+    m.castShadow = true;
+    m.receiveShadow = true;
+    return m;
+  }
+
+  function walls(w, h, d, floors, cols, color) {
+    const side = facade(floors, cols, color, false);
+    const front = facade(floors, cols, color, true);
+    const top = plain(color);
+    const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d),
+      [side, side, top, top, front, side]);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+
+  function gableRoof(w, h, d, color) {
+    const s = new THREE.Shape();
+    s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(0, h); s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, { depth: d, bevelEnabled: false });
+    g.translate(0, 0, -d / 2);
+    const m = new THREE.Mesh(g, plain(color));
+    m.castShadow = true;
+    return m;
+  }
+
+  function buildHut() {
+    const g = new THREE.Group();
+    const b = walls(3.4, 2, 3.4, 1, 2, "#e8c9a0");
+    b.position.y = 1; g.add(b);
+    const r = new THREE.Mesh(new THREE.ConeGeometry(3.1, 1.9, 4), plain("#b5532f"));
+    r.rotation.y = Math.PI / 4; r.position.y = 2.95; r.castShadow = true;
+    g.add(r);
+    return g;
+  }
+
+  function buildHouse() {
+    const g = new THREE.Group();
+    const b = walls(3.8, 2.6, 4.2, 2, 2, "#f2e4c9");
+    b.position.y = 1.3; g.add(b);
+    const roof = gableRoof(4.5, 1.9, 4.8, "#a63d2f");
+    roof.position.y = 2.6; g.add(roof);
+    g.add(mesh(new THREE.BoxGeometry(0.5, 1.2, 0.5), plain("#8a8a8a"), 1.1, 3.4, -1));
+    return g;
+  }
+
+  function buildVilla() {
+    const g = new THREE.Group();
+    const b = walls(5.2, 3.4, 4, 2, 4, "#fafafa");
+    b.position.y = 1.7; g.add(b);
+    g.add(mesh(new THREE.BoxGeometry(5.7, 0.25, 4.5), plain("#37474f"), 0, 3.52, 0));
+    const up = walls(2.2, 1.5, 2.2, 1, 2, "#fafafa");
+    up.position.set(-1.4, 4.4, -0.3); g.add(up);
+    g.add(mesh(new THREE.BoxGeometry(2.6, 0.2, 2.6), plain("#37474f"), -1.4, 5.25, -0.3));
+    g.add(mesh(new THREE.BoxGeometry(5.2, 0.12, 1.2), plain("#b0bec5"), 0, 1.7, 2.6));
+    const pool = mesh(new THREE.BoxGeometry(2.4, 0.08, 1.2), new THREE.MeshLambertMaterial({ color: 0x4fc3f7 }), 1.3, 0.05, 2.5);
+    g.add(pool);
+    return g;
+  }
+
+  function buildTower() {
+    const g = new THREE.Group();
+    g.add(mesh(new THREE.BoxGeometry(5, 0.8, 5), plain("#607d8b"), 0, 0.4, 0));
+    const b = walls(3.2, 9, 3.2, 9, 3, "#b8c6d0");
+    b.position.y = 5.3; g.add(b);
+    g.add(mesh(new THREE.BoxGeometry(3.5, 0.3, 3.5), plain("#455a64"), 0, 9.9, 0));
+    g.add(mesh(new THREE.CylinderGeometry(0.06, 0.06, 2, 6), plain("#cfd8dc"), 0, 11, 0));
+    return g;
+  }
+
+  const TYPES = [
+    { key: "hut", name: "كوخ", emoji: "🛖", build: buildHut },
+    { key: "house", name: "بيت", emoji: "🏠", build: buildHouse },
+    { key: "villa", name: "فيلا", emoji: "🏡", build: buildVilla },
+    { key: "tower", name: "برج", emoji: "🏢", build: buildTower }
+  ];
+
+  // ---------- المشهد ----------
+  const S = {
+    ready: false, active: false, scene: null, camera: null, renderer: null,
+    root: null, pads: [], houses: {}, plots: {}, selected: -1, ring: null,
+    hemi: null, sun: null, anims: [], theta: Math.PI / 4, phi: 1.0, radius: 40
+  };
+
+  function plotPos(i) {
+    const c = i % COLS, r = Math.floor(i / COLS);
+    return [(c - (COLS - 1) / 2) * STEP, (r - (ROWS - 1) / 2) * STEP];
+  }
+
+  function save() {
+    try { localStorage.setItem(SAVE_KEY, JSON.stringify(S.plots)); } catch (_) {}
+  }
+
+  function logEvent(text) {
+    const log = document.getElementById("event-log");
+    if (!log) return;
+    const li = document.createElement("li");
+    li.textContent = text;
+    log.appendChild(li);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function placeHouse(plot, key, silent) {
+    const type = TYPES.find((t) => t.key === key);
+    if (!type || plot < 0 || plot >= COLS * ROWS) return false;
+    removeHouse(plot, true);
+    const grp = type.build();
+    const [x, z] = plotPos(plot);
+    grp.position.set(x, 0.15, z);
+    grp.userData.plot = plot;
+    grp.rotation.y = 0;
+    S.root.add(grp);
+    S.houses[plot] = grp;
+    S.plots[plot] = key;
+    if (!silent) {
+      grp.scale.set(1, 0.01, 1);
+      S.anims.push({ obj: grp, t0: performance.now() });
+      logEvent("🏗️ تم بناء " + type.name + " في القطعة " + (plot + 1));
+      save();
+    }
+    updateInfo();
+    return true;
+  }
+
+  function removeHouse(plot, silent) {
+    const g = S.houses[plot];
+    if (!g) return;
+    S.root.remove(g);
+    delete S.houses[plot];
+    delete S.plots[plot];
+    if (!silent) { logEvent("🧹 تم هدم المبنى في القطعة " + (plot + 1)); save(); }
+    updateInfo();
+  }
+
+  function selectPlot(i) {
+    S.selected = i;
+    S.pads.forEach((p, k) => p.material.color.set(k === i ? 0xfff3b0 : 0xcfd8c8));
+    if (i >= 0) {
+      const [x, z] = plotPos(i);
+      S.ring.position.set(x, 0.18, z);
+      S.ring.visible = true;
+    } else S.ring.visible = false;
+    updateInfo();
+  }
+
+  function updateInfo() {
+    const el = document.getElementById("c3-info");
+    if (!el) return;
+    const count = Object.keys(S.plots).length;
+    let t = "🏘️ المباني: " + count + "/" + COLS * ROWS;
+    if (S.selected >= 0) {
+      const k = S.plots[S.selected];
+      const nm = k ? TYPES.find((x) => x.key === k).name : "فارغة";
+      t += " · القطعة " + (S.selected + 1) + " (" + nm + ")";
+    } else t += " · اختر قطعة أرض";
+    el.textContent = t;
+  }
+
+  function setNight(on) {
+    night = on;
+    S.scene.background.set(on ? 0x0a1530 : 0xbfe3ff);
+    S.scene.fog.color.set(on ? 0x0a1530 : 0xbfe3ff);
+    S.hemi.intensity = on ? 0.35 : 0.9;
+    S.sun.intensity = on ? 0.25 : 0.85;
+    facadeMats.forEach((m) => (m.emissiveIntensity = on ? 1 : 0));
+  }
+
+  function updateCamera() {
+    const { theta, phi, radius } = S;
+    S.camera.position.set(
+      radius * Math.sin(phi) * Math.sin(theta),
+      radius * Math.cos(phi),
+      radius * Math.sin(phi) * Math.cos(theta)
+    );
+    S.camera.lookAt(0, 1.5, 0);
+  }
+
+  function buildWorld() {
+    const scene = (S.scene = new THREE.Scene());
+    scene.background = new THREE.Color(0xbfe3ff);
+    scene.fog = new THREE.Fog(0xbfe3ff, 55, 130);
+
+    S.hemi = new THREE.HemisphereLight(0xffffff, 0x6b8f5e, 0.9);
+    scene.add(S.hemi);
+    S.sun = new THREE.DirectionalLight(0xffffff, 0.85);
+    S.sun.position.set(25, 40, 15);
+    S.sun.castShadow = true;
+    S.sun.shadow.mapSize.set(1024, 1024);
+    const sc = S.sun.shadow.camera;
+    sc.left = -35; sc.right = 35; sc.top = 35; sc.bottom = -35; sc.near = 1; sc.far = 120;
+    scene.add(S.sun);
+
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(220, 220), plain("#7cb36a"));
+    ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true;
+    scene.add(ground);
+
+    const road = new THREE.Mesh(new THREE.PlaneGeometry(COLS * STEP + 2, ROWS * STEP + 2), plain("#3d4448"));
+    road.rotation.x = -Math.PI / 2; road.position.y = 0.02; road.receiveShadow = true;
+    scene.add(road);
+
+    S.root = new THREE.Group();
+    scene.add(S.root);
+
+    for (let i = 0; i < COLS * ROWS; i++) {
+      const [x, z] = plotPos(i);
+      const pad = new THREE.Mesh(new THREE.BoxGeometry(PLOT + 0.6, 0.3, PLOT + 0.6), plain("#cfd8c8"));
+      pad.position.set(x, 0, z);
+      pad.receiveShadow = true;
+      pad.userData.plot = i;
+      pad.material.color.set(0xcfd8c8);
+      scene.add(pad);
+      S.pads.push(pad);
+    }
+
+    S.ring = new THREE.Mesh(
+      new THREE.RingGeometry(PLOT * 0.55, PLOT * 0.62, 40),
+      new THREE.MeshBasicMaterial({ color: 0xffc107, side: THREE.DoubleSide })
+    );
+    S.ring.rotation.x = -Math.PI / 2; S.ring.visible = false;
+    scene.add(S.ring);
+
+    // أشجار حول المدينة
+    const trunk = plain("#6d4c2f"), leaf = plain("#2e7d32"), leaf2 = plain("#43a047");
+    const halfW = (COLS * STEP) / 2 + 3, halfD = (ROWS * STEP) / 2 + 3;
+    for (let n = 0; n < 46; n++) {
+      let x = (Math.random() * 2 - 1) * (halfW + 14);
+      let z = (Math.random() * 2 - 1) * (halfD + 14);
+      if (Math.abs(x) < halfW + 1 && Math.abs(z) < halfD + 1) continue;
+      const t = new THREE.Group();
+      t.add(mesh(new THREE.CylinderGeometry(0.2, 0.28, 1.2, 6), trunk, 0, 0.6, 0));
+      t.add(mesh(new THREE.ConeGeometry(1.2, 2.2, 7), n % 2 ? leaf : leaf2, 0, 2.1, 0));
+      t.add(mesh(new THREE.ConeGeometry(0.9, 1.7, 7), n % 2 ? leaf2 : leaf, 0, 3.1, 0));
+      const s = 0.8 + Math.random() * 0.8;
+      t.scale.set(s, s, s);
+      t.position.set(x, 0, z);
+      scene.add(t);
+    }
+
+    // استرجاع المباني المحفوظة
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVE_KEY) || "{}");
+      Object.keys(saved).forEach((k) => placeHouse(Number(k), saved[k], true));
+    } catch (_) {}
+  }
+
+  // ---------- التحكم ----------
+  function setupControls(canvas) {
+    const ptrs = new Map();
+    let down = null, pinch = 0, moved = false;
+
+    canvas.addEventListener("pointerdown", (e) => {
+      canvas.setPointerCapture(e.pointerId);
+      ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (ptrs.size === 1) { down = { x: e.clientX, y: e.clientY, t: Date.now() }; moved = false; }
+      if (ptrs.size === 2) {
+        const [a, b] = [...ptrs.values()];
+        pinch = Math.hypot(a.x - b.x, a.y - b.y);
+        moved = true;
+      }
+    });
+
+    canvas.addEventListener("pointermove", (e) => {
+      const p = ptrs.get(e.pointerId);
+      if (!p) return;
+      if (ptrs.size === 1) {
+        const dx = e.clientX - p.x, dy = e.clientY - p.y;
+        if (down && Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) moved = true;
+        if (moved) {
+          S.theta -= dx * 0.008;
+          S.phi = Math.min(1.4, Math.max(0.3, S.phi - dy * 0.006));
+          updateCamera();
+        }
+      } else if (ptrs.size === 2) {
+        p.x = e.clientX; p.y = e.clientY;
+        const [a, b] = [...ptrs.values()];
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        if (pinch) S.radius = Math.min(75, Math.max(14, S.radius * (pinch / d)));
+        pinch = d;
+        updateCamera();
+      }
+      p.x = e.clientX; p.y = e.clientY;
+    });
+
+    const end = (e) => {
+      const was = ptrs.size;
+      ptrs.delete(e.pointerId);
+      if (was === 1 && !moved && down && Date.now() - down.t < 450) tap(e.clientX, e.clientY, canvas);
+      if (ptrs.size < 2) pinch = 0;
+    };
+    canvas.addEventListener("pointerup", end);
+    canvas.addEventListener("pointercancel", (e) => { ptrs.delete(e.pointerId); pinch = 0; });
+
+    canvas.addEventListener("wheel", (e) => {
+      e.preventDefault();
+      S.radius = Math.min(75, Math.max(14, S.radius * (1 + e.deltaY * 0.001)));
+      updateCamera();
+    }, { passive: false });
+  }
+
+  function tap(cx, cy, canvas) {
+    const r = canvas.getBoundingClientRect();
+    const ndc = new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera(ndc, S.camera);
+    const hits = ray.intersectObjects(S.scene.children, true);
+    for (const h of hits) {
+      let o = h.object;
+      while (o) {
+        if (o.userData && o.userData.plot !== undefined) { selectPlot(o.userData.plot); return; }
+        o = o.parent;
+      }
+    }
+    selectPlot(-1);
+  }
+
+  function frame(now) {
+    if (!S.active) return;
+    requestAnimationFrame(frame);
+    for (let i = S.anims.length - 1; i >= 0; i--) {
+      const a = S.anims[i];
+      const k = Math.min(1, (now - a.t0) / 650);
+      const c1 = 1.70158, c3 = c1 + 1;
+      const e = 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); // easeOutBack
+      a.obj.scale.y = Math.max(0.01, e);
+      if (k >= 1) { a.obj.scale.set(1, 1, 1); S.anims.splice(i, 1); }
+    }
+    if (S.ring.visible) S.ring.material.opacity = 0.6 + 0.4 * Math.sin(now / 250);
+    S.renderer.render(S.scene, S.camera);
+  }
+
+  // ---------- الواجهة ----------
+  function buildUI(host) {
+    host.innerHTML = `
+      <div class="c3-top">
+        <div class="c3-info" id="c3-info"></div>
+        <div class="c3-tools">
+          <button type="button" id="c3-night" title="نهار / ليل">🌙</button>
+          <button type="button" id="c3-reset" title="إعادة الكاميرا">🎯</button>
+        </div>
+      </div>
+      <div class="c3-bar" id="c3-bar"></div>`;
+
+    const bar = host.querySelector("#c3-bar");
+    TYPES.forEach((t) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.innerHTML = "<span>" + t.emoji + "</span>" + t.name;
+      b.addEventListener("click", () => {
+        if (S.selected < 0) { flash("اضغط على قطعة أرض الأول 👆"); return; }
+        placeHouse(S.selected, t.key);
+      });
+      bar.appendChild(b);
+    });
+    const del = document.createElement("button");
+    del.type = "button"; del.className = "danger";
+    del.innerHTML = "<span>🗑️</span>هدم";
+    del.addEventListener("click", () => {
+      if (S.selected < 0 || !S.plots[S.selected]) { flash("اختر قطعة فيها مبنى"); return; }
+      removeHouse(S.selected);
+    });
+    bar.appendChild(del);
+
+    host.querySelector("#c3-night").addEventListener("click", (e) => {
+      setNight(!night);
+      e.currentTarget.textContent = night ? "☀️" : "🌙";
+    });
+    host.querySelector("#c3-reset").addEventListener("click", () => {
+      S.theta = Math.PI / 4; S.phi = 1.0; S.radius = 40; updateCamera();
+    });
+  }
+
+  function flash(text) {
+    const el = document.getElementById("c3-info");
+    if (!el) return;
+    el.textContent = text;
+    setTimeout(updateInfo, 1600);
+  }
+
+  function loadThree() {
+    return new Promise((resolve, reject) => {
+      if (window.THREE) return resolve(window.THREE);
+      const s = document.createElement("script");
+      s.src = THREE_URL;
+      s.onload = () => resolve(window.THREE);
+      s.onerror = () => reject(new Error("load"));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function init3D(host) {
+    host.innerHTML = '<div class="c3-msg">جاري تحميل المدينة ثلاثية الأبعاد...</div>';
+    try {
+      THREE = await loadThree();
+    } catch (_) {
+      host.innerHTML = '<div class="c3-msg">تعذر تحميل مكتبة 3D. تأكد من الإنترنت وحاول تاني.</div>';
+      return false;
+    }
+    host.innerHTML = "";
+    const renderer = (S.renderer = new THREE.WebGLRenderer({ antialias: true }));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    host.appendChild(renderer.domElement);
+
+    S.camera = new THREE.PerspectiveCamera(45, 1, 0.5, 300);
+    buildWorld();
+    buildUI(host);
+    setupControls(renderer.domElement);
+    updateCamera();
+    updateInfo();
+
+    const resize = () => {
+      const w = host.clientWidth, h = host.clientHeight;
+      if (!w || !h) return;
+      renderer.setSize(w, h, false);
+      S.camera.aspect = w / h;
+      S.camera.updateProjectionMatrix();
+    };
+    new ResizeObserver(resize).observe(host);
+    resize();
+    S.ready = true;
+    return true;
+  }
+
+  function setupTabs() {
+    const head = document.querySelector(".world-panel .panel-head");
+    const game = document.getElementById("game-container");
+    if (!head || !game) return;
+
+    const style = document.createElement("style");
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
+    const tabs = document.createElement("div");
+    tabs.className = "view-tabs";
+    tabs.innerHTML =
+      '<button type="button" class="on" data-v="2d">🗺️ خريطة 2D</button>' +
+      '<button type="button" data-v="3d">🏙️ مدينة 3D</button>';
+    head.after(tabs);
+
+    const host = document.createElement("div");
+    host.id = "city3d-container";
+    game.after(host);
+
+    async function show(v) {
+      tabs.querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.v === v));
+      if (v === "3d") {
+        game.style.display = "none";
+        host.style.display = "block";
+        if (!S.ready) { const ok = await init3D(host); if (!ok) return; }
+        S.active = true;
+        requestAnimationFrame(frame);
+      } else {
+        S.active = false;
+        host.style.display = "none";
+        game.style.display = "";
+      }
+    }
+    tabs.addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (b) show(b.dataset.v);
+    });
+
+    // واجهة برمجية عشان باقي اللعبة تبني من الكود (مثلاً لما البنّاء يخلص مهمة)
+    window.Khayruna3D = {
+      build(key, plot) {
+        if (!S.ready) return false;
+        if (plot === undefined) {
+          for (let i = 0; i < COLS * ROWS; i++) if (!S.plots[i]) { plot = i; break; }
+        }
+        return plot === undefined ? false : placeHouse(plot, key);
+      },
+      count: () => Object.keys(S.plots).length,
+      show
+    };
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", setupTabs);
+  else setupTabs();
+})();
+
+</script>
+
   <!-- مساعد الذكاء الاصطناعي -->
   <script>
 (() => {
