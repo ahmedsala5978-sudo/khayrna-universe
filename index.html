@@ -4,6 +4,56 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#0b2a1f">
+  <script>
+/* شريط تشخيص: بيظهر لوحده لو فيه خطأ أو الخريطة ماتحملتش. احذفه لما كل حاجة تشتغل. */
+(() => {
+  const problems = [];
+  const add = (t) => { if (!problems.includes(t)) problems.push(t); };
+
+  // أخطاء الجافاسكربت
+  window.addEventListener("error", (e) => {
+    if (e.target && e.target !== window && (e.target.src || e.target.href)) {
+      add("❌ فشل تحميل ملف: " + (e.target.src || e.target.href));
+    } else {
+      const file = (e.filename || "").split("/").pop();
+      add("⚠️ خطأ: " + e.message + (file ? " (" + file + ":" + e.lineno + ")" : ""));
+    }
+  }, true);
+
+  window.addEventListener("unhandledrejection", (e) => {
+    add("⚠️ خطأ غير معالج: " + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+
+  function report() {
+    const box = document.getElementById("game-container");
+    const canvas = box && box.querySelector("canvas");
+    const info = [];
+    info.push("Phaser: " + (window.Phaser ? "تم تحميلها ✅" : "غير موجودة ❌"));
+    info.push("حاوية الخريطة: " + (box ? box.clientWidth + "×" + box.clientHeight : "غير موجودة ❌"));
+    info.push("لوحة الخريطة: " + (canvas ? canvas.clientWidth + "×" + canvas.clientHeight : "لم تُرسم ❌"));
+    info.push("Three.js (3D): " + (window.THREE ? "محمّلة ✅" : "لسه ما اتحمّلتش"));
+
+    const bad = problems.length > 0 || !canvas || canvas.clientHeight < 20;
+    if (!bad && !/[?&]debug/.test(location.search)) return;
+
+    const el = document.createElement("div");
+    el.style.cssText =
+      "position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#7a1f1f;color:#fff;" +
+      "font:13px/1.7 Tahoma,Arial,sans-serif;padding:10px 12px;direction:rtl;text-align:right;" +
+      "max-height:55vh;overflow:auto;box-shadow:0 4px 20px rgba(0,0,0,.5)";
+    el.innerHTML =
+      '<button type="button" style="float:left;background:#fff;color:#7a1f1f;border:0;border-radius:8px;padding:4px 10px;font-weight:bold">إغلاق</button>' +
+      "<b>🔧 تشخيص كون خيرنا</b><br>" +
+      info.join("<br>") +
+      (problems.length ? "<hr style='border-color:#ffffff55'>" + problems.map((p) => p.replace(/</g, "&lt;")).join("<br>") : "");
+    el.querySelector("button").onclick = () => el.remove();
+    document.body.appendChild(el);
+  }
+
+  window.addEventListener("load", () => setTimeout(report, 2500));
+})();
+
+</script>
   <title>كون خيرنا</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -226,11 +276,18 @@ main {
   box-shadow: 0 10px 35px rgba(0, 0, 0, 0.4);
   background: #0a1f17;
   line-height: 0;
+  /* حجم ثابت للحاوية عشان Phaser ياخد مقاس صح (من غيره الخريطة ممكن تبقى ارتفاعها صفر) */
+  width: 100%;
+  min-height: clamp(300px, 55vh, 520px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 #game-container canvas {
   display: block;
   max-width: 100%;
+  height: auto;
   margin: 0 auto;
 }
 
